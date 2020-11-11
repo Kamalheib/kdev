@@ -5,7 +5,8 @@ import sys
 import shutil
 from argparse import ArgumentParser
 
-PKGS = 'rdma-core pciutils infiniband-diags libibverbs-utils librdmacm-utils ethtool'
+PKGS = 'pciutils ethtool rdma-core infiniband-diags libibverbs-utils librdmacm-utils'
+CUSTOM_PKGS = '/home/kheib/rdma-core-build/RPMS/x86_64/*.rpm'
 KERNEL_DIR = '/home/kheib/git/upstream/linux'
 ROOTFS_DIR = '/home/kheib/rootfs'
 HOME_DIR = '/home/kheib'
@@ -22,6 +23,8 @@ class kdev(object):
             rootfs kernel modules', action='store_true', default=False)
         self.Parser.add_argument('--rootfs', help='Create fedora rootfs \
             file', action='store_true', default=False)
+        self.Parser.add_argument('--custom_pkgs', help='Install custom packages',
+                action='store_true', default=False)
         self.Parser.add_argument('--run', help='Run an instance of VM using \
              the built kernel', action='store_true', default=False)
         self.Parser.parse_args(namespace=self, args=args)
@@ -41,11 +44,21 @@ class kdev(object):
             shutil.rmtree(ROOTFS_DIR)
         os.mkdir(ROOTFS_DIR)
         os.chdir(ROOTFS_DIR)
-        os.system('dnf groupinstall "Minimal Install" --releasever=32 --installroot=%s --repo=fedora --repo=updates -y' % ROOTFS_DIR)
-        os.system('dnf install --releasever=32 --installroot=%s --repo=fedora  --repo=updates -y %s' % (ROOTFS_DIR, PKGS))
+        os.system('dnf groupinstall "Minimal Install" --releasever=33 --installroot=%s --repo=fedora --repo=updates -y' % ROOTFS_DIR)
+        os.system('dnf install --releasever=33 --installroot=%s --repo=fedora  --repo=updates -y %s' % (ROOTFS_DIR, PKGS))
         os.system("sed -i 's/root:\*:/root::/g' etc/shadow")
         os.system('find . | cpio -o --format=newc > %s/rootfs.img' % HOME_DIR)
         os.chdir(cwd)
+
+    def install_custom_pkgs(self):
+        cwd = os.getcwd()
+        if os.path.exists(ROOTFS_DIR):
+            os.chdir(ROOTFS_DIR)
+            os.system('dnf reinstall --releasever=33 --installroot=%s --repo=fedora --repo=updates -y %s' % (ROOTFS_DIR, CUSTOM_PKGS))
+            os.system('find . | cpio -o --format=newc > %s/rootfs.img' % HOME_DIR)
+            os.chdir(cwd)
+        else:
+            print("NO rootfs directory created!!")
 
     def run_vm(self):
         qemu_cmd = 'qemu-system-x86_64 -s -cpu host -smp cpus=4 -m 4G -nographic -enable-kvm \
@@ -60,6 +73,8 @@ class kdev(object):
             self.build_kernel()
         if self.rootfs:
             self.create_rootfs()
+        if self.custom_pkgs:
+            self.install_custom_pkgs()
         if self.run:
             self.run_vm()
 
